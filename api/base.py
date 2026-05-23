@@ -465,14 +465,12 @@ class Chaoxing:
         # Time in the video (can be scaled with the speed factor): duration, play_time, last_log_time, wait_time
 
         duration = int(_video_info["duration"])
-        ratio = random.uniform(0.70, 0.85)
-        play_duration = int(duration * ratio)  # 增加随机扰动, 防止每次上报的时间点都完全一样
         play_time = int(_job["playTime"]) // 1000
         last_log_time = 0
         last_iter = time.time()
         wait_time = int(random.uniform(30, 90))
 
-        logger.info(f"开始任务: {_job['name']}, 总时长: {duration}s, 播放比例: {ratio:.2f}, 播放时长: {play_duration}s, 已进行: {play_time}s")
+        logger.info(f"开始任务: {_job['name']}, 总时长: {duration}s, 已进行: {play_time}s")
 
         pbar = tqdm(total=duration, initial=play_time, desc=_job["name"],
                     unit_scale=True, bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}')
@@ -487,7 +485,7 @@ class Chaoxing:
             logger.info("任务瞬间完成: {}", _job['name'])
             return StudyResult.SUCCESS
 
-        while not passed and play_time < play_duration:
+        while not passed:
             # Sometimes the last request needs to be sent several times to complete the task
             if play_time - last_log_time >= wait_time or play_time == duration:
 
