@@ -445,7 +445,7 @@ class Chaoxing:
         return None
 
 
-    def study_video(self, _course, _job, _job_info, _speed: float = 1.0, min_ratio: float = 1.0, max_ratio: float = 1.0, _type: Literal["Video", "Audio"] = "Video") -> StudyResult:
+    def study_video(self, _course, _job, _job_info, _speed: float = 1.0, _type: Literal["Video", "Audio"] = "Video") -> StudyResult:
         _session = SessionManager.get_session()
 
         headers = gc.VIDEO_HEADERS if _type == "Video" else gc.AUDIO_HEADERS
@@ -465,7 +465,7 @@ class Chaoxing:
         # Time in the video (can be scaled with the speed factor): duration, play_time, last_log_time, wait_time
 
         duration = int(_video_info["duration"])
-        ratio = random.uniform(min_ratio, max_ratio)
+        ratio = random.uniform(0.70, 0.85)
         play_duration = int(duration * ratio)  # 增加随机扰动, 防止每次上报的时间点都完全一样
         play_time = int(_job["playTime"]) // 1000
         last_log_time = 0

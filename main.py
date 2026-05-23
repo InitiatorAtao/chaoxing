@@ -110,11 +110,6 @@ def load_config_from_file(config_path):
         # 处理speed，将字符串转换为浮点数
         if "speed" in common_config:
             common_config["speed"] = float(common_config["speed"])
-        # 处理min_ratio和max_ratio，将字符串转换为浮点数
-        if "min_ratio" in common_config:
-            common_config["min_ratio"] = float(common_config["min_ratio"])
-        if "max_ratio" in common_config:
-            common_config["max_ratio"] = float(common_config["max_ratio"])
         if "jobs" in common_config:
             common_config["jobs"] = int(common_config["jobs"])
         # 处理notopen_action，设置默认值为retry
@@ -210,22 +205,19 @@ def init_chaoxing(common_config, tiku_config):
     return chaoxing
 
 
-def process_job(chaoxing: Chaoxing, course: dict, job: dict, job_info: dict, config: dict) -> StudyResult:
+def process_job(chaoxing: Chaoxing, course: dict, job: dict, job_info: dict, speed: float) -> StudyResult:
     """处理单个任务点"""
-    speed = config.get("speed", 1.0)
-    min_ratio = config.get("min_ratio", 0.70)
-    max_ratio = config.get("max_ratio", 0.85)
     # 视频任务
     if job["type"] == "video":
         logger.trace(f"识别到视频任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")
         # 超星的接口没有返回当前任务是否为Audio音频任务
         video_result = chaoxing.study_video(
-            course, job, job_info, _speed=speed, min_ratio=min_ratio, max_ratio=max_ratio, _type="Video"
+            course, job, job_info, _speed=speed, _type="Video"
         )
         if video_result.is_failure():
             logger.warning("当前任务非视频任务, 正在尝试音频任务解码")
             video_result = chaoxing.study_video(
-                course, job, job_info, _speed=speed, min_ratio=min_ratio, max_ratio=max_ratio, _type="Audio")
+                course, job, job_info, _speed=speed, _type="Audio")
         if video_result.is_failure():
             logger.warning(
                 f"出现异常任务 -> 任务章节: {course['title']} 任务ID: {job['jobid']}, 已跳过"
@@ -329,7 +321,7 @@ class JobProcessor:
                 logger.info("Queue shut down")
                 return
 
-            task.result = process_chapter(self.chaoxing, self.course, task.point, self.config)
+            task.result = process_chapter(self.chaoxing, self.course, task.point, self.speed)
 
             match task.result:
                 case ChapterResult.SUCCESS:
@@ -383,7 +375,7 @@ class JobProcessor:
             pass
 
 
-def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, Any], config: dict) -> ChapterResult:
+def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, Any], speed:float) -> ChapterResult:
     """处理单个章节"""
     logger.info(f'当前章节: {point["title"]}')
     if point["has_finished"]:
@@ -408,7 +400,7 @@ def process_chapter(chaoxing: Chaoxing, course:dict[str, Any], point:dict[str, A
     # TODO: 个别章节很恶心，多到5个点，可以并行处理，将来会让不同课程不同章节的所有任务点共享一个队列，从而实现全局并行
     job_results:list[StudyResult]=[]
     with ThreadPoolExecutor(max_workers=5) as executor:
-        for result in executor.map(lambda job: process_job(chaoxing, course, job, job_info, config), jobs):
+        for result in executor.map(lambda job: process_job(chaoxing, course, job, job_info, speed), jobs):
             job_results.append(result)
     
     for result in job_results:
@@ -514,8 +506,6 @@ def main():
         
         # 强制播放按照配置文件调节
         common_config["speed"] = min(2.0, max(1.0, common_config.get("speed", 1.0)))
-        common_config["min_ratio"] = min(1.0, max(0.0, common_config.get("min_ratio", 1.0)))
-        common_config["max_ratio"] = min(1.0, max(common_config.get("min_ratio", 1.0), common_config.get("max_ratio", 1.0)))
         common_config["notopen_action"] = common_config.get("notopen_action", "retry")
         
         # 初始化超星实例
