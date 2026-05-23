@@ -6,6 +6,8 @@ import sys
 import threading
 import time
 import traceback
+import random
+import math
 from concurrent.futures.thread import ThreadPoolExecutor
 from dataclasses import dataclass
 from queue import PriorityQueue, ShutDown
@@ -112,6 +114,11 @@ def load_config_from_file(config_path):
             common_config["speed"] = float(common_config["speed"])
         if "jobs" in common_config:
             common_config["jobs"] = int(common_config["jobs"])
+        # 处理min_ratio和max_ratio，将字符串转换为浮点数
+        if "min_ratio" in common_config:
+            common_config["min_ratio"] = float(common_config["min_ratio"])
+        if "max_ratio" in common_config:
+            common_config["max_ratio"] = float(common_config["max_ratio"])
         # 处理notopen_action，设置默认值为retry
         if "notopen_action" not in common_config:
             common_config["notopen_action"] = "retry"
@@ -420,6 +427,24 @@ def process_course(chaoxing: Chaoxing, course:dict[str, Any], config: dict):
         course["courseId"], course["clazzId"], course["cpi"]
     )
 
+    # 按照 config 中任务点完成比例的范围挑选任务点
+
+    min_ratio = config.get("min_ratio", 1.0)
+    max_ratio = config.get("max_ratio", 1.0)
+    tasks_count = len(point_list["points"])
+    min_run_tasks = math.ceil(tasks_count * min_ratio)
+    max_run_tasks = max(math.floor(tasks_count * max_ratio), min_run_tasks)
+    run_tasks_count = random.randint(min_run_tasks, max_run_tasks)
+    
+    logger.info(f"课程章节总数: {tasks_count}, 计划完成章节数量范围: [{min_run_tasks}, {max_run_tasks}], 目标完成章节数量: {run_tasks_count}")
+
+    finished_points = [point for point in point_list["points"] if point["has_finished"]]
+    unfinished_points = [point for point in point_list["points"] if not point["has_finished"]]
+
+    if len(finished_points) >= run_tasks_count:
+        logger.info(f"已完成章节数量 {len(finished_points)} 已经超过目标完成数量 {run_tasks_count}, 课程已完成")
+        return
+
     # 为了支持课程任务回滚, 采用下标方式遍历任务点
 
     _old_format_sizeof = tqdm.format_sizeof
@@ -428,7 +453,7 @@ def process_course(chaoxing: Chaoxing, course:dict[str, Any], config: dict):
 
     tasks=[]
 
-    for i, point in enumerate(point_list["points"]):
+    for i, point in enumerate(random.sample(unfinished_points, run_tasks_count - len(finished_points))):
         task = ChapterTask(point=point, index=i)
         tasks.append(task)
     p = JobProcessor(chaoxing, course, tasks, config)
@@ -507,6 +532,10 @@ def main():
         # 强制播放按照配置文件调节
         common_config["speed"] = min(2.0, max(1.0, common_config.get("speed", 1.0)))
         common_config["notopen_action"] = common_config.get("notopen_action", "retry")
+
+        # 约束min_ratio和max_ratio在0到1之间，并且min_ratio不大于max_ratio
+        common_config["min_ratio"] = min(1.0, max(0.0, common_config.get("min_ratio", 1.0)))
+        common_config["max_ratio"] = min(1.0, max(0.0, common_config.get("min_ratio", 1.0), common_config.get("max_ratio", 1.0)))
         
         # 初始化超星实例
         chaoxing = init_chaoxing(common_config, tiku_config)
